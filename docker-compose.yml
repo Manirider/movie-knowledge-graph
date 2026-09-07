@@ -1,0 +1,58 @@
+services:
+  neo4j:
+    image: neo4j:5.18.0
+    container_name: movie-graph-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=${NEO4J_AUTH}
+    volumes:
+      - ./data:/data
+      - ./logs:/logs
+      - ./init:/var/lib/neo4j/import
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474/ 2>/dev/null || curl -f http://localhost:7474/ 2>/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  neo4j-init:
+    image: neo4j:5.18.0
+    container_name: movie-graph-init
+    depends_on:
+      - neo4j
+    volumes:
+      - ./init:/init
+    env_file:
+      - .env
+    environment:
+      - NEO4J_AUTH=${NEO4J_AUTH}
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        echo "[init] Waiting for Neo4j to be ready..."
+        # Extract password from NEO4J_AUTH (format: neo4j/<password>)
+        NEO4J_PASSWORD=$$(echo "$$NEO4J_AUTH" | cut -d'/' -f2)
+        if [ -z "$$NEO4J_PASSWORD" ]; then
+          echo "[init] ERROR: NEO4J_AUTH not set or invalid"
+          exit 1
+        fi
+        # Wait for Bolt to be reachable (up to 300s, covers slow startup)
+        for i in $$(seq 1 60); do
+          if cypher-shell -a neo4j://neo4j:7687 -u neo4j -p "$$NEO4J_PASSWORD" "RETURN 1 AS ok;" >/dev/null 2>&1; then
+            echo "[init] Neo4j is ready (attempt $$i)"
+            break
+          fi
+          echo "[init] Waiting... attempt $$i/60"
+          sleep 5
+        done
+        # Verify Neo4j is reachable before seeding
+        cypher-shell -a neo4j://neo4j:7687 -u neo4j -p "$$NEO4J_PASSWORD" "RETURN 1 AS ok;" >/dev/null 2>&1 || (echo "[init] ERROR: Neo4j not reachable after waiting" && exit 1)
+        echo "[init] Executing seed.cypher..."
+        cypher-shell -a neo4j://neo4j:7687 -u neo4j -p "$$NEO4J_PASSWORD" -f /init/seed.cypher
+        echo "[init] Seed completed successfully"
+    restart: "no"

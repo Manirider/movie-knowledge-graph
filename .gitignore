@@ -1,0 +1,32 @@
+# Neo4j generated data
+.env
+data/
+logs/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node (if any scripts added)
+node_modules/
+
+# Python (if any scripts added)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Docker artifacts
+.docker/
+
+# Temp
+tmp/
+*.log
